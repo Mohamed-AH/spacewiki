@@ -45,6 +45,7 @@
             <button class="tab active" data-tab="track" role="tab" aria-selected="true">Track</button>
             <button class="tab" data-tab="launch" role="tab" aria-selected="false">Launch</button>
             <button class="tab" data-tab="probes" role="tab" aria-selected="false">Probes</button>
+            <button class="tab" data-tab="moon" role="tab" aria-selected="false">Moon</button>
             <button class="tab" data-tab="about" role="tab" aria-selected="false">About</button>
         </nav>
 
@@ -90,19 +91,37 @@
 
                 <div class="card">
                     <h3>Orbit Classes</h3>
+                    <p class="hint" style="margin-bottom:8px">Toggle a class to show or hide
+                    its satellites and labels.</p>
                     <ul class="legend">
-                        <li><span class="swatch" style="--c:#4cc9f0"></span>LEO — low Earth orbit (&lt; 2 h period)</li>
-                        <li><span class="swatch" style="--c:#7ee787"></span>MEO — medium Earth orbit</li>
-                        <li><span class="swatch" style="--c:#f0b429"></span>GEO — geosynchronous belt</li>
-                        <li><span class="swatch" style="--c:#d2a8ff"></span>HEO — highly elliptical</li>
+                        <li><label class="toggle legend-toggle"><input type="checkbox" data-class="LEO" checked>
+                            <span class="swatch" style="--c:#4cc9f0"></span>LEO — low Earth orbit (&lt; 2 h)</label></li>
+                        <li><label class="toggle legend-toggle"><input type="checkbox" data-class="MEO" checked>
+                            <span class="swatch" style="--c:#7ee787"></span>MEO — medium Earth orbit</label></li>
+                        <li><label class="toggle legend-toggle"><input type="checkbox" data-class="GEO" checked>
+                            <span class="swatch" style="--c:#f0b429"></span>GEO — geosynchronous belt</label></li>
+                        <li><label class="toggle legend-toggle"><input type="checkbox" data-class="HEO" checked>
+                            <span class="swatch" style="--c:#d2a8ff"></span>HEO — highly elliptical</label></li>
                     </ul>
+                </div>
+
+                <div class="card">
+                    <h3>Display</h3>
+                    <label class="toggle">
+                        <input type="checkbox" id="labels-toggle">
+                        Name labels <span id="labels-note" class="toggle-note"></span>
+                    </label>
+                    <label class="toggle">
+                        <input type="checkbox" id="constellations-toggle" checked>
+                        Constellation figures
+                    </label>
                     <label class="toggle">
                         <input type="checkbox" id="scale-toggle" checked>
                         Exaggerate low altitudes (display only)
                     </label>
                     <p class="hint">Marker sizes and low-orbit altitudes are exaggerated for
                     visibility — telemetry readouts are always true values. Click any satellite
-                    to inspect it. Press <kbd>Esc</kbd> to deselect.</p>
+                    to inspect it.</p>
                 </div>
             </section>
 
@@ -112,8 +131,15 @@
                 coordinates, with a gravity-turn ascent profile and particle exhaust.</p>
 
                 <div class="card">
+                    <h3>Launch Timeline</h3>
+                    <p class="hint" style="margin-bottom:8px">Seven decades of spaceflight —
+                    select a mission on the timeline.</p>
+                    <div id="launch-timeline"></div>
+                </div>
+
+                <div class="card">
                     <h3>Launch Site Simulator</h3>
-                    <label for="launch-select">Historical mission</label>
+                    <label for="launch-select">Mission</label>
                     <select id="launch-select"></select>
                     <div id="launch-info" class="mission-meta"></div>
                     <button id="launch-btn" class="primary">Execute flight trajectory</button>
@@ -134,6 +160,23 @@
                 system — gravity assists, orbit insertions, and system-exit trajectories.
                 Planetary distances are compressed for legibility (not to scale).</p>
                 <div id="probe-cards"></div>
+            </section>
+
+            <!-- ============ MOON ============ -->
+            <section class="tab-page" id="tab-moon" role="tabpanel">
+                <p class="lede">Our nearest neighbour, rendered at its true present direction
+                in the sky (distance compressed for display), tidally locked and lit by the
+                real Sun. Twelve humans have walked its surface — visit where they landed.</p>
+
+                <div class="card">
+                    <h3>The Moon</h3>
+                    <p>The near side always faces Earth. Its position is computed from a
+                    simplified lunar ephemeris, so the phase and sky direction you see match
+                    tonight's sky.</p>
+                    <button id="moon-visit-btn" class="primary">Fly to the Moon</button>
+                </div>
+
+                <div id="moon-cards"></div>
             </section>
 
             <!-- ============ ABOUT ============ -->
@@ -162,7 +205,7 @@
                     <h3>Data Sources</h3>
                     <p><strong>CelesTrak</strong> — live GP element sets
                     (<code>celestrak.org</code>).<br>
-                    <strong>NASA / Three.js</strong> — Earth surface, city-light, and cloud
+                    <strong>NASA / Three.js</strong> — Earth, Moon, city-light, and cloud
                     imagery.<br>
                     <strong>Three.js</strong> r160 &amp; <strong>satellite.js</strong> v5 —
                     rendering and propagation, vendored locally.</p>
@@ -201,6 +244,42 @@
         <div id="hud" class="hud">
             <div class="hud-title">SYSTEM ONLINE</div>
             <div id="hud-body">LEO radar environment scan active…</div>
+        </div>
+
+        <div id="controls-hint" aria-hidden="true">
+            <span><b>Drag</b> orbit</span>
+            <span><b>Scroll</b> zoom</span>
+            <span><b>Click</b> inspect satellite</span>
+            <span><b>Esc</b> clear / return</span>
+        </div>
+
+        <div id="probe-tracker" class="hidden">
+            <div class="tracker-head">
+                <button id="tracker-play" title="Play / pause">❚❚</button>
+                <span id="tracker-name">—</span>
+                <span id="tracker-year" class="tracker-year">—</span>
+            </div>
+            <div class="tracker-slider-wrap">
+                <div id="tracker-ticks"></div>
+                <input type="range" id="tracker-slider" min="0" max="1000" value="0" step="1"
+                       aria-label="Mission timeline">
+            </div>
+            <div class="tracker-readouts">
+                <span>DIST FROM SUN <b id="tracker-au">—</b></span>
+                <span>LIGHT-TIME <b id="tracker-light">—</b></span>
+            </div>
+            <div class="tracker-gauge">
+                <!-- log10 scale, 0.1 AU .. 150 AU -->
+                <div class="gauge-track">
+                    <span class="gauge-mark" style="--x:0%">☉</span>
+                    <span class="gauge-mark" style="--x:31%">1 AU</span>
+                    <span class="gauge-mark" style="--x:54%">Jupiter</span>
+                    <span class="gauge-mark" style="--x:62%">Saturn</span>
+                    <span class="gauge-mark" style="--x:82%">Pluto</span>
+                    <span class="gauge-mark" style="--x:97%">Heliopause</span>
+                    <div id="gauge-needle"></div>
+                </div>
+            </div>
         </div>
 
         <div id="sat-card" class="sat-card hidden" aria-live="polite">

@@ -344,6 +344,263 @@ a.mail:hover { color: #bfeaff; border-bottom-style: solid; }
 
 .status-note { margin-left: auto; color: var(--text-faint); opacity: 0.8; }
 
+.toggle-note { color: var(--text-faint); font-size: 10.5px; margin-left: 4px; }
+
+.legend-toggle { margin: 2px 0; }
+.legend-toggle input { flex-shrink: 0; }
+
+/* ---------------- Controls hint (viewport overlay) ---------------- */
+
+#controls-hint {
+    position: absolute;
+    left: 16px;
+    bottom: 40px;
+    display: flex;
+    gap: 16px;
+    padding: 7px 12px;
+    background: rgba(9, 13, 23, 0.66);
+    backdrop-filter: blur(6px);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.6px;
+    color: var(--text-faint);
+    pointer-events: none;
+    z-index: 9;
+    white-space: nowrap;
+}
+#controls-hint b { color: var(--text-dim); font-weight: 600; }
+
+/* ---------------- Launch timeline ---------------- */
+
+#launch-timeline {
+    position: relative;
+    padding: 6px 0 2px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+#launch-timeline::before {
+    content: '';
+    position: absolute;
+    left: 46px;
+    top: 0; bottom: 0;
+    width: 1px;
+    background: var(--border);
+}
+
+.tl-item {
+    position: relative;
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    padding: 5px 4px 5px 0;
+    cursor: pointer;
+    border-radius: 5px;
+}
+.tl-item:hover { background: rgba(76, 201, 240, 0.06); }
+
+.tl-year {
+    width: 38px;
+    text-align: right;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-faint);
+    flex-shrink: 0;
+}
+
+.tl-item::after {
+    content: '';
+    position: absolute;
+    left: 43.5px;
+    top: 50%;
+    width: 6px; height: 6px;
+    margin-top: -3px;
+    border-radius: 50%;
+    background: var(--border);
+    transition: background 0.15s, box-shadow 0.15s;
+}
+
+.tl-name {
+    font-size: 12px;
+    color: var(--text-dim);
+    padding-left: 8px;
+}
+
+.tl-item.active .tl-name { color: var(--accent); }
+.tl-item.active .tl-year { color: var(--text-dim); }
+.tl-item.active::after { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+
+/* ---------------- Probe tracker overlay ---------------- */
+
+#probe-tracker {
+    position: absolute;
+    left: 50%;
+    bottom: 44px;
+    transform: translateX(-50%);
+    width: min(560px, calc(100% - 32px));
+    background: rgba(9, 13, 23, 0.9);
+    backdrop-filter: blur(8px);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 16px 10px;
+    z-index: 12;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+}
+#probe-tracker.hidden { display: none; }
+
+.tracker-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+#tracker-play {
+    width: 28px; height: 28px;
+    padding: 0;
+    flex-shrink: 0;
+    background: #0d1322;
+    border: 1px solid var(--accent-dim);
+    border-radius: 50%;
+    color: var(--accent);
+    font-size: 10px;
+    line-height: 1;
+}
+#tracker-play:hover { border-color: var(--accent); color: #fff; }
+
+#tracker-name {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--accent);
+    letter-spacing: 0.5px;
+}
+
+.tracker-year {
+    margin-left: auto;
+    font-family: var(--mono);
+    font-size: 16px;
+    color: #eef4fb;
+    font-variant-numeric: tabular-nums;
+}
+
+.tracker-slider-wrap { position: relative; height: 22px; }
+
+#tracker-ticks {
+    position: absolute;
+    left: 0; right: 0; top: 0;
+    height: 8px;
+    pointer-events: none;
+}
+.tracker-tick {
+    position: absolute;
+    top: 0;
+    left: var(--x);
+    width: 2px; height: 8px;
+    margin-left: -1px;
+    background: var(--amber);
+    opacity: 0.8;
+    border-radius: 1px;
+}
+
+#tracker-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 4px;
+    margin: 12px 0 0;
+    background: #1c2537;
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+}
+#tracker-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 10px rgba(76, 201, 240, 0.6);
+    cursor: grab;
+}
+#tracker-slider::-moz-range-thumb {
+    width: 14px; height: 14px;
+    border: none;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 10px rgba(76, 201, 240, 0.6);
+    cursor: grab;
+}
+
+.tracker-readouts {
+    display: flex;
+    gap: 24px;
+    margin-top: 8px;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.8px;
+    color: var(--text-faint);
+}
+.tracker-readouts b {
+    color: #eef4fb;
+    font-weight: 400;
+    font-variant-numeric: tabular-nums;
+}
+
+.tracker-gauge { margin-top: 10px; }
+
+.gauge-track {
+    position: relative;
+    height: 26px;
+    border-top: 1px solid var(--border);
+}
+.gauge-mark {
+    position: absolute;
+    left: var(--x);
+    top: 4px;
+    transform: translateX(-50%);
+    font-family: var(--mono);
+    font-size: 8.5px;
+    letter-spacing: 0.4px;
+    color: var(--text-faint);
+    white-space: nowrap;
+}
+.gauge-mark::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: -5px;
+    width: 1px; height: 4px;
+    background: var(--text-faint);
+}
+
+#gauge-needle {
+    position: absolute;
+    left: 0;
+    top: -5px;
+    width: 2px; height: 9px;
+    margin-left: -1px;
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+    border-radius: 1px;
+    transition: left 0.2s linear;
+}
+
+/* ---------------- Moon cards ---------------- */
+
+.moon-card .crew {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+}
+
+@media (max-width: 900px) {
+    #controls-hint { display: none; }
+    #probe-tracker { bottom: 36px; padding: 10px 12px 8px; }
+    .gauge-mark { font-size: 7.5px; }
+}
+
 kbd {
     font-family: var(--mono);
     font-size: 10px;

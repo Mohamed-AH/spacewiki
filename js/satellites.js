@@ -3,10 +3,12 @@
 
 import * as THREE from 'three';
 import * as satellite from 'satellite.js';
-import { makeDiscTexture, ecfToScene } from './scene.js';
+import { makeDiscTexture, makeTextSprite, ecfToScene } from './scene.js';
 import { CELESTRAK_BASE, FALLBACK_TLES, EARTH_RADIUS } from './data.js';
 
-const MAX_RENDERED = 1500;
+const MAX_RENDERED = 12000;      // full mega-constellations
+const PROPAGATE_CHUNK = 3000;    // SGP4 records refreshed per tick (round-robin)
+const LABEL_LIMIT = 60;
 
 // Display-only altitude exaggeration so low orbits don't hug the surface.
 // The boost decays with altitude: LEO lifts visibly, GEO is untouched.
@@ -66,6 +68,10 @@ export class SatelliteLayer {
         this.usingFallback = false;
         this.selectedIndex = -1;
         this.exaggerated = true;   // display-only altitude scaling (see toggle)
+        this.classVisible = { LEO: true, MEO: true, GEO: true, HEO: true };
+        this.labelsEnabled = false;
+        this.labelItems = [];      // { index, sprite }
+        this.cursor = 0;           // round-robin propagation cursor
 
         // Shared point cloud
         this.positions = new Float32Array(MAX_RENDERED * 3);
@@ -107,6 +113,9 @@ export class SatelliteLayer {
         );
         this.orbitLine.visible = false;
         this.group.add(this.orbitLine);
+
+        this.labelGroup = new THREE.Group();
+        this.group.add(this.labelGroup);
 
         this.raycaster = new THREE.Raycaster();
         this.raycaster.params.Points.threshold = 0.09;
@@ -157,7 +166,13 @@ export class SatelliteLayer {
         }
         this.geometry.attributes.color.needsUpdate = true;
         this.geometry.setDrawRange(0, this.records.length);
-        this.update(new Date());
+
+        // Small catalogs get larger markers so they stand apart from the stars.
+        this.points.material.size = this.records.length <= 120 ? 0.24 : 0.15;
+
+        this.cursor = 0;
+        this.refreshAll(new Date());
+        this.rebuildLabels();
 
         return {
             total: this.catalogTotal,
@@ -166,14 +181,11 @@ export class SatelliteLayer {
         };
     }
 
-    /** Propagate every satellite to `now` (ECI -> ECEF via GMST -> scene). */
-    update(now) {
-        const gmst = satellite.gstime(now);
-        const v = new THREE.Vector3();
-
-        for (let i = 0; i < this.records.length; i++) {
-            const rec = this.records[i];
-            let ok = false;
+    /** Propagate one record and write its scene position into the buffer. */
+    propagateOne(i, now, gmst, v) {
+        const rec = this.records[i];
+        let ok = false;
+        if (this.classVisible[rec.class]) {
             try {
                 const pv = satellite.propagate(rec.satrec, now);
                 if (pv && pv.position && typeof pv.position !== 'boolean') {
@@ -186,15 +198,48 @@ export class SatelliteLayer {
                     ok = true;
                 }
             } catch { /* decayed / propagation error */ }
-
-            if (!ok) {
-                // Park failed nodes at origin, inside the globe (invisible).
-                this.positions[i * 3] = 0;
-                this.positions[i * 3 + 1] = 0;
-                this.positions[i * 3 + 2] = 0;
-                rec.pv = null;
-            }
         }
+        if (!ok) {
+            // Park hidden/failed nodes at origin, inside the globe (invisible).
+            this.positions[i * 3] = 0;
+            this.positions[i * 3 + 1] = 0;
+            this.positions[i * 3 + 2] = 0;
+            rec.pv = null;
+        }
+    }
+
+    /**
+     * Per-tick propagation. Large catalogs are refreshed round-robin in chunks
+     * (a full 12k-object pass every few ticks keeps the frame rate high); the
+     * selected and labelled satellites are refreshed every tick.
+     */
+    update(now) {
+        const n = this.records.length;
+        if (n === 0) return;
+        const gmst = satellite.gstime(now);
+        const v = new THREE.Vector3();
+
+        const chunk = Math.min(n, PROPAGATE_CHUNK);
+        for (let k = 0; k < chunk; k++) {
+            this.propagateOne((this.cursor + k) % n, now, gmst, v);
+        }
+        this.cursor = (this.cursor + chunk) % n;
+
+        for (const item of this.labelItems) this.propagateOne(item.index, now, gmst, v);
+        if (this.selectedIndex >= 0) this.propagateOne(this.selectedIndex, now, gmst, v);
+
+        this.afterPositionsChanged();
+    }
+
+    /** Full immediate pass over every record (used on load and filter changes). */
+    refreshAll(now) {
+        const gmst = satellite.gstime(now);
+        const v = new THREE.Vector3();
+        for (let i = 0; i < this.records.length; i++) this.propagateOne(i, now, gmst, v);
+        this.afterPositionsChanged();
+    }
+
+    afterPositionsChanged() {
         this.geometry.attributes.position.needsUpdate = true;
         this.geometry.computeBoundingSphere();
 
@@ -203,6 +248,59 @@ export class SatelliteLayer {
             this.marker.position.set(
                 this.positions[i * 3], this.positions[i * 3 + 1], this.positions[i * 3 + 2]);
         }
+        for (const item of this.labelItems) {
+            const i = item.index;
+            item.sprite.position.set(
+                this.positions[i * 3], this.positions[i * 3 + 1], this.positions[i * 3 + 2]);
+            item.sprite.visible = this.records[i].pv !== null;
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Labels & class filtering
+    // -----------------------------------------------------------------------
+
+    setLabelsEnabled(enabled) {
+        this.labelsEnabled = enabled;
+        this.rebuildLabels();
+    }
+
+    setClassVisible(cls, visible) {
+        this.classVisible[cls] = visible;
+        this.refreshAll(new Date());
+        this.rebuildLabels();
+        if (this.selectedIndex >= 0 && !visible &&
+            this.records[this.selectedIndex].class === cls) {
+            this.deselect();
+        }
+    }
+
+    rebuildLabels() {
+        for (const item of this.labelItems) {
+            item.sprite.material.map.dispose();
+            item.sprite.material.dispose();
+        }
+        this.labelGroup.clear();
+        this.labelItems = [];
+        if (!this.labelsEnabled) return;
+
+        for (let i = 0; i < this.records.length && this.labelItems.length < LABEL_LIMIT; i++) {
+            const rec = this.records[i];
+            if (!this.classVisible[rec.class]) continue;
+            const sprite = makeTextSprite(rec.name, {
+                color: '#a9c8ea', size: 20, height: 0.32,
+            });
+            sprite.center.set(0.5, -0.55);   // float the label above the marker
+            sprite.material.opacity = 0.75;
+            this.labelGroup.add(sprite);
+            this.labelItems.push({ index: i, sprite });
+        }
+        this.afterPositionsChanged();
+    }
+
+    /** True when the catalog is small enough that every object gets a label. */
+    labelsCoverAll() {
+        return this.records.length <= LABEL_LIMIT;
     }
 
     /** Raycast pick from a pointer event; returns record index or -1. */
