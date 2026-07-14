@@ -55,56 +55,113 @@ export const LAUNCH_SITES = {
 };
 
 // ---------------------------------------------------------------------------
-// Deep-space probe archive (escape direction vectors are stylised, not ephemeris)
+// Stylised heliocentric layout (compressed distances, creative license —
+// covered by the on-screen "not to scale" disclaimer).
+// ---------------------------------------------------------------------------
+export const SUN_DISTANCE = 55;          // scene units, Earth <-> Sun
+export const AU_COMPRESSION = 0.45;      // ring radius = SUN_DISTANCE * au^C
+
+export const PLANETS = {
+    mercury: { au: 0.387, size: 0.22, color: 0x9c8f84, label: 'Mercury', angle: 25 },
+    venus:   { au: 0.723, size: 0.38, color: 0xd9b380, label: 'Venus',   angle: -65 },
+    mars:    { au: 1.524, size: 0.28, color: 0xc96f4a, label: 'Mars',    angle: 135 },
+    jupiter: { au: 5.203, size: 1.35, color: 0xd8b28a, label: 'Jupiter', angle: -110 },
+    saturn:  { au: 9.537, size: 1.10, color: 0xe0c894, label: 'Saturn',  angle: 65, rings: true },
+    uranus:  { au: 19.19, size: 0.62, color: 0x9fd4dc, label: 'Uranus',  angle: 170 },
+    neptune: { au: 30.07, size: 0.60, color: 0x6f8fd8, label: 'Neptune', angle: -150 },
+    pluto:   { au: 39.48, size: 0.17, color: 0xbfae9f, label: 'Pluto',   angle: 105 },
+};
+
+// ---------------------------------------------------------------------------
+// Deep-space probe archive. Each route is a stylised replay: waypoints are
+// planet encounters (angle = position on that planet's orbit ring, degrees
+// from the Earth direction) and the ending is either an escape out of the
+// system or an orbit insertion at the final body.
 // ---------------------------------------------------------------------------
 export const PROBES = {
     voyager: {
         name: 'Voyager 1 & 2',
         meta: 'Launched 1977 · NASA · Status: Interstellar space',
         blurb: 'Launched to execute a grand tour of the Jovian and Saturnian systems. Both spacecraft have crossed the heliopause and now operate in interstellar space, still returning data after four decades.',
-        action: 'Simulate escape route',
-        escapeDir: [1.8, 1.0, -2.8],
+        action: 'Replay the Grand Tour',
         color: 0x00e5ff,
+        route: {
+            waypoints: [
+                { body: 'jupiter', angle: 28, note: 'Gravity assist — Jupiter (1979)' },
+                { body: 'saturn', angle: 52, note: 'Gravity assist — Saturn (1980)' },
+            ],
+            end: { type: 'escape', note: 'Heliopause crossed — interstellar space' },
+        },
     },
     pioneer: {
         name: 'Pioneer 10 & 11',
         meta: 'Launched 1972 / 1973 · NASA · Status: Outward drift',
         blurb: 'Pioneered asteroid-belt traversal and the first close encounters with Jupiter and Saturn. Both are now silent, drifting outward toward the stellar neighbourhood carrying the Pioneer plaques.',
-        action: 'Simulate Pioneer exit',
-        escapeDir: [-1.9, -0.2, 2.5],
+        action: 'Replay Pioneer exit',
         color: 0x7ee787,
+        route: {
+            waypoints: [
+                { body: 'jupiter', angle: -155, note: 'First Jupiter flyby (1973)' },
+                { body: 'saturn', angle: -125, note: 'First Saturn flyby (1979)' },
+            ],
+            end: { type: 'escape', note: 'Outward drift — toward the stars' },
+        },
     },
     cassini: {
         name: 'Cassini–Huygens',
         meta: 'Launched 1997 · NASA / ESA / ASI · Status: Mission complete',
         blurb: 'Orbited Saturn for 13 years, delivered the Huygens lander to Titan, and captured ring and atmospheric dynamics before a deliberate end-of-mission descent into Saturn in 2017.',
-        action: 'Simulate orbital insertion',
-        escapeDir: [1.0, 1.4, 0.4],
+        action: 'Replay orbital insertion',
         color: 0xf0b429,
+        route: {
+            waypoints: [
+                { body: 'venus', angle: -95, note: 'Gravity assist — Venus (1998–99)' },
+                { body: 'jupiter', angle: -55, note: 'Gravity assist — Jupiter (2000)' },
+                { body: 'saturn', angle: 40, note: 'Approaching the ringed giant' },
+            ],
+            end: { type: 'orbit', body: 'saturn', note: 'Saturn orbit insertion (2004)' },
+        },
     },
     newhorizons: {
         name: 'New Horizons',
         meta: 'Launched 2006 · NASA · Status: Kuiper Belt',
         blurb: 'Executed the first flyby of Pluto in 2015 and of the Kuiper Belt object Arrokoth in 2019 — the most distant close encounter ever performed. It continues outward at over 13 km/s.',
-        action: 'Simulate flyby route',
-        escapeDir: [-0.8, 0.6, -3.0],
+        action: 'Replay Pluto flyby',
         color: 0xff5cf4,
+        route: {
+            waypoints: [
+                { body: 'jupiter', angle: 75, note: 'Gravity assist — Jupiter (2007)' },
+                { body: 'pluto', angle: 95, note: 'Pluto flyby (2015)' },
+            ],
+            end: { type: 'escape', note: 'Arrokoth flyby — deep Kuiper Belt' },
+        },
     },
     juno: {
         name: 'Juno',
         meta: 'Launched 2011 · NASA · Status: Active polar orbit',
         blurb: 'Orbiting Jupiter on extreme 53-day polar ellipses, Juno measures deep atmospheric water content, gravity harmonics, and the dynamics of the strongest magnetosphere in the Solar System.',
-        action: 'Simulate Jupiter transfer',
-        escapeDir: [0.6, -2.1, -0.4],
+        action: 'Replay Jupiter transfer',
         color: 0xfff06e,
+        route: {
+            waypoints: [
+                { body: 'mars', angle: -25, note: 'Cruise — beyond the orbit of Mars' },
+                { body: 'jupiter', angle: -80, note: 'Approaching the gas giant' },
+            ],
+            end: { type: 'orbit', body: 'jupiter', note: 'Jupiter orbit insertion (2016)' },
+        },
     },
     parker: {
         name: 'Parker Solar Probe',
         meta: 'Launched 2018 · NASA · Status: Solar corona',
         blurb: 'Descending inside the Sun’s coronal boundary via repeated Venus gravity assists, Parker holds the record as the fastest human-made object — over 190 km/s at perihelion.',
-        action: 'Simulate solar descent',
-        escapeDir: [0.2, -0.4, 0.1],
+        action: 'Replay solar descent',
         color: 0xff7a45,
+        route: {
+            waypoints: [
+                { body: 'venus', angle: 55, note: 'Gravity assist — Venus' },
+            ],
+            end: { type: 'orbit', body: 'sun', note: 'Perihelion — inside the corona' },
+        },
     },
 };
 
