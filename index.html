@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Global Space Explorer — live 3D satellite tracking, historical launch simulations, and deep space mission archive, rendered with Three.js.">
+    <title>Global Space Explorer — Mission Console</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='30' fill='none' stroke='%234cc9f0' stroke-width='6'/><ellipse cx='50' cy='50' rx='46' ry='14' fill='none' stroke='%234cc9f0' stroke-width='4' transform='rotate(-20 50 50)'/></svg>">
+    <link rel="stylesheet" href="css/styles.css">
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "./vendor/three.module.min.js",
+            "three/addons/controls/OrbitControls.js": "./vendor/OrbitControls.js",
+            "satellite.js": "./vendor/satellite.es.js"
+        }
+    }
+    </script>
+</head>
+<body>
+
+<header id="topbar">
+    <button id="menu-toggle" aria-label="Toggle control panel" title="Toggle control panel">
+        <span></span><span></span><span></span>
+    </button>
+    <div class="brand">
+        <svg viewBox="0 0 100 100" width="22" height="22" aria-hidden="true">
+            <circle cx="50" cy="50" r="28" fill="none" stroke="#4cc9f0" stroke-width="7"/>
+            <ellipse cx="50" cy="50" rx="46" ry="13" fill="none" stroke="#4cc9f0" stroke-width="5" transform="rotate(-20 50 50)"/>
+        </svg>
+        <h1>Global Space Explorer <span>// Mission Console</span></h1>
+    </div>
+    <div class="topbar-status">
+        <div id="link-status" class="link-status" data-state="init">
+            <span class="dot"></span><span id="link-label">INITIALIZING</span>
+        </div>
+        <div id="utc-clock" class="utc-clock">---------- --:--:-- UTC</div>
+    </div>
+</header>
+
+<div id="layout">
+
+    <aside id="panel">
+        <nav id="tabs" role="tablist">
+            <button class="tab active" data-tab="track" role="tab" aria-selected="true">Track</button>
+            <button class="tab" data-tab="launch" role="tab" aria-selected="false">Launch</button>
+            <button class="tab" data-tab="probes" role="tab" aria-selected="false">Probes</button>
+            <button class="tab" data-tab="about" role="tab" aria-selected="false">About</button>
+        </nav>
+
+        <div class="panel-body">
+
+            <!-- ============ TRACK ============ -->
+            <section class="tab-page active" id="tab-track" role="tabpanel">
+                <p class="lede">Live low-Earth-orbit telemetry, propagated client-side with the
+                SGP4 model from CelesTrak two-line element sets.</p>
+
+                <div class="card">
+                    <h3>LEO Telemetry Filter</h3>
+                    <p>Query the global spatial registry by sovereign flag or technical profile.</p>
+
+                    <label for="country-select">Sovereign registry</label>
+                    <select id="country-select">
+                        <option value="US" selected>United States — NASA / USSF / Commercial</option>
+                        <option value="IND">India — ISRO</option>
+                        <option value="CIS">Russia — Roscosmos</option>
+                        <option value="PRC">China — CNSA</option>
+                    </select>
+
+                    <label for="utility-select">Technical profile</label>
+                    <select id="utility-select">
+                        <option value="NONE" selected>— Default: use country —</option>
+                        <option value="science">Scientific payloads</option>
+                        <option value="weather">Meteorological fleets</option>
+                        <option value="stations">Crewed space stations</option>
+                        <option value="gps-ops">Navigation — GPS</option>
+                        <option value="beidou">Navigation — BeiDou</option>
+                        <option value="glo-ops">Navigation — GLONASS</option>
+                        <option value="galileo">Navigation — Galileo</option>
+                    </select>
+
+                    <button id="refresh-btn" class="primary">Re-poll registry</button>
+                </div>
+
+                <div class="card">
+                    <h3>Orbit Classes</h3>
+                    <ul class="legend">
+                        <li><span class="swatch" style="--c:#4cc9f0"></span>LEO — low Earth orbit (&lt; 2 h period)</li>
+                        <li><span class="swatch" style="--c:#7ee787"></span>MEO — medium Earth orbit</li>
+                        <li><span class="swatch" style="--c:#f0b429"></span>GEO — geosynchronous belt</li>
+                        <li><span class="swatch" style="--c:#d2a8ff"></span>HEO — highly elliptical</li>
+                    </ul>
+                    <p class="hint">Click any satellite in the viewport to inspect its live
+                    telemetry and instantaneous orbital track. Press <kbd>Esc</kbd> to deselect.</p>
+                </div>
+            </section>
+
+            <!-- ============ LAUNCH ============ -->
+            <section class="tab-page" id="tab-launch" role="tabpanel">
+                <p class="lede">Re-enact historic first flights from their true geodetic pad
+                coordinates, with a gravity-turn ascent profile and particle exhaust.</p>
+
+                <div class="card">
+                    <h3>Launch Site Simulator</h3>
+                    <label for="launch-select">Historical mission</label>
+                    <select id="launch-select"></select>
+                    <div id="launch-info" class="mission-meta"></div>
+                    <button id="launch-btn" class="primary">Execute flight trajectory</button>
+                </div>
+
+                <div class="card">
+                    <h3>Ascent Model</h3>
+                    <p>The vehicle rises along the local surface normal, then pitches downrange
+                    toward geographic east on a quadratic Bézier gravity turn — the same
+                    manoeuvre real launchers fly to trade vertical climb for orbital
+                    velocity.</p>
+                </div>
+            </section>
+
+            <!-- ============ PROBES ============ -->
+            <section class="tab-page" id="tab-probes" role="tabpanel">
+                <p class="lede">Interplanetary flight logs. Heliocentric escape routes are
+                modelled as Catmull-Rom splines encoding launch, gravity assists, and
+                system-exit vectors.</p>
+                <div id="probe-cards"></div>
+            </section>
+
+            <!-- ============ ABOUT ============ -->
+            <section class="tab-page" id="tab-about" role="tabpanel">
+                <p class="lede">A client-side mission console for space enthusiasts —
+                no build step, no backend, no textures.</p>
+
+                <div class="card">
+                    <h3>Orbital Mechanics</h3>
+                    <p>Satellites are propagated with the <strong>SGP4</strong> model from
+                    two-line element (TLE) sets. Each frame the propagator returns
+                    Earth-Centered Inertial coordinates, which are rotated into
+                    Earth-Centered Earth-Fixed space using Greenwich Mean Sidereal Time —
+                    so every marker sits above its true ground position, in real time.</p>
+                </div>
+
+                <div class="card">
+                    <h3>Textureless Cartography</h3>
+                    <p>No imagery is downloaded. Coastlines are generated on the fly from the
+                    Natural Earth 1:110m land dataset: each geographic polygon is projected
+                    onto the sphere and drawn as a GPU line loop, keeping the whole planet
+                    under 150 kB.</p>
+                </div>
+
+                <div class="card">
+                    <h3>Data Sources</h3>
+                    <p><strong>CelesTrak</strong> — live GP element sets
+                    (<code>celestrak.org</code>).<br>
+                    <strong>Natural Earth</strong> — public-domain vector cartography.<br>
+                    <strong>Three.js</strong> r160 &amp; <strong>satellite.js</strong> v5 —
+                    rendering and propagation, vendored locally.</p>
+                </div>
+
+                <div class="card">
+                    <h3>Controls</h3>
+                    <p>Drag to orbit · scroll to zoom · right-drag to pan ·
+                    click a satellite to inspect · <kbd>Esc</kbd> clears simulations
+                    and selection.</p>
+                </div>
+            </section>
+        </div>
+    </aside>
+
+    <main id="viewport-container">
+        <canvas id="scene-canvas"></canvas>
+
+        <div id="hud" class="hud">
+            <div class="hud-title">SYSTEM ONLINE</div>
+            <div id="hud-body">LEO radar environment scan active…</div>
+        </div>
+
+        <div id="sat-card" class="sat-card hidden" aria-live="polite">
+            <button id="sat-card-close" class="card-close" aria-label="Deselect satellite">×</button>
+            <div class="sat-name" id="sat-name">—</div>
+            <div class="sat-grid">
+                <div><label>NORAD ID</label><span id="sat-norad">—</span></div>
+                <div><label>Class</label><span id="sat-class">—</span></div>
+                <div><label>Altitude</label><span id="sat-alt">—</span></div>
+                <div><label>Velocity</label><span id="sat-vel">—</span></div>
+                <div><label>Period</label><span id="sat-period">—</span></div>
+                <div><label>Inclination</label><span id="sat-incl">—</span></div>
+            </div>
+        </div>
+
+        <div id="statusbar">
+            <span id="status-source">SOURCE: —</span>
+            <span id="status-nodes">CATALOG: —</span>
+            <span id="status-render">RENDERED: —</span>
+            <span id="status-fps">FPS: —</span>
+        </div>
+    </main>
+</div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
