@@ -4,9 +4,24 @@
 import * as THREE from 'three';
 import * as satellite from 'satellite.js';
 import { makeDiscTexture, ecfToScene } from './scene.js';
-import { CELESTRAK_BASE, FALLBACK_TLES } from './data.js';
+import { CELESTRAK_BASE, FALLBACK_TLES, EARTH_RADIUS } from './data.js';
 
 const MAX_RENDERED = 1500;
+
+// Display-only altitude exaggeration so low orbits don't hug the surface.
+// The boost decays with altitude: LEO lifts visibly, GEO is untouched.
+const EXAG_STRENGTH = 3.4;
+const EXAG_FALLOFF = 1.2; // scene units (~1530 km)
+
+function exaggerateRadial(v, enabled) {
+    if (!enabled) return v;
+    const r = v.length();
+    const alt = r - EARTH_RADIUS;
+    if (alt <= 0) return v;
+    const boosted = EARTH_RADIUS +
+        alt * (1 + EXAG_STRENGTH * Math.exp(-alt / EXAG_FALLOFF));
+    return v.multiplyScalar(boosted / r);
+}
 
 const ORBIT_CLASSES = {
     LEO: { color: new THREE.Color(0x4cc9f0), label: 'LEO' },
@@ -50,6 +65,7 @@ export class SatelliteLayer {
         this.sourceLabel = '—';
         this.usingFallback = false;
         this.selectedIndex = -1;
+        this.exaggerated = true;   // display-only altitude scaling (see toggle)
 
         // Shared point cloud
         this.positions = new Float32Array(MAX_RENDERED * 3);
@@ -62,7 +78,7 @@ export class SatelliteLayer {
         this.geometry.setDrawRange(0, 0);
 
         this.points = new THREE.Points(this.geometry, new THREE.PointsMaterial({
-            size: 0.11,
+            size: 0.15,
             map: makeDiscTexture(),
             vertexColors: true,
             transparent: true,
@@ -96,11 +112,10 @@ export class SatelliteLayer {
         this.raycaster.params.Points.threshold = 0.09;
     }
 
-    /** Build the CelesTrak GP query for the current filter selection. */
-    static queryUrl(country, group) {
-        return group !== 'NONE'
-            ? `${CELESTRAK_BASE}?GROUP=${encodeURIComponent(group)}&FORMAT=tle`
-            : `${CELESTRAK_BASE}?COUNTRY=${encodeURIComponent(country)}&FORMAT=tle`;
+    /** Build the CelesTrak GP query. Only GROUP queries are supported by the
+     *  GP API (CATNR/INTDES/GROUP/NAME/SPECIAL — there is no COUNTRY filter). */
+    static queryUrl(group) {
+        return `${CELESTRAK_BASE}?GROUP=${encodeURIComponent(group)}&FORMAT=tle`;
     }
 
     /**
@@ -163,7 +178,7 @@ export class SatelliteLayer {
                 const pv = satellite.propagate(rec.satrec, now);
                 if (pv && pv.position && typeof pv.position !== 'boolean') {
                     const ecf = satellite.eciToEcf(pv.position, gmst);
-                    ecfToScene(ecf, v);
+                    exaggerateRadial(ecfToScene(ecf, v), this.exaggerated);
                     this.positions[i * 3] = v.x;
                     this.positions[i * 3 + 1] = v.y;
                     this.positions[i * 3 + 2] = v.z;
@@ -203,9 +218,17 @@ export class SatelliteLayer {
         this.raycaster.params.Points.threshold =
             0.012 * camera.position.length();
 
+        // Don't select satellites hidden behind the planet.
+        const sphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), EARTH_RADIUS);
+        const sphereHit = new THREE.Vector3();
+        const earthDist = this.raycaster.ray.intersectSphere(sphere, sphereHit)
+            ? this.raycaster.ray.origin.distanceTo(sphereHit)
+            : Infinity;
+
         const hits = this.raycaster.intersectObject(this.points, false);
         for (const hit of hits) {
             const i = hit.index;
+            if (hit.distance > earthDist) continue;
             if (i < this.records.length && this.records[i].pv) return i;
         }
         return -1;
@@ -242,7 +265,7 @@ export class SatelliteLayer {
                 const pv = satellite.propagate(rec.satrec, t);
                 if (pv && pv.position && typeof pv.position !== 'boolean') {
                     const ecf = satellite.eciToEcf(pv.position, gmst);
-                    pts.push(ecfToScene(ecf, v).clone());
+                    pts.push(exaggerateRadial(ecfToScene(ecf, v), this.exaggerated).clone());
                 }
             } catch { /* skip bad sample */ }
         }

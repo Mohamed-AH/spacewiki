@@ -1,6 +1,7 @@
-// Application shell: UI wiring, render loop, and telemetry readouts.
+// Application shell: UI wiring, camera rig, render loop, telemetry readouts.
 
-import { createScene, loadCoastlines } from './scene.js';
+import * as THREE from 'three';
+import { createScene } from './scene.js';
 import { SatelliteLayer } from './satellites.js';
 import { Simulations } from './simulations.js';
 import { LAUNCH_SITES, PROBES } from './data.js';
@@ -17,9 +18,9 @@ const linkStatus = $('link-status');
 const linkLabel = $('link-label');
 const utcClock = $('utc-clock');
 
-const countrySelect = $('country-select');
-const utilitySelect = $('utility-select');
+const catalogSelect = $('catalog-select');
 const refreshBtn = $('refresh-btn');
+const scaleToggle = $('scale-toggle');
 const launchSelect = $('launch-select');
 const launchInfo = $('launch-info');
 const launchBtn = $('launch-btn');
@@ -30,6 +31,7 @@ const statusSource = $('status-source');
 const statusNodes = $('status-nodes');
 const statusRender = $('status-render');
 const statusFps = $('status-fps');
+const statusScale = $('status-scale');
 
 function setHud(title, body) {
     hudTitle.textContent = title;
@@ -44,15 +46,89 @@ function setLink(state, label) {
 // ---------------------------------------------------------------------------
 // Scene + feature layers
 // ---------------------------------------------------------------------------
-const { renderer, scene, camera, controls, landGroup, satGroup, simGroup } =
+const { renderer, scene, camera, controls, satGroup, simGroup, updateSun, updateClouds } =
     createScene(canvas);
 
 const satLayer = new SatelliteLayer(satGroup);
 const sims = new Simulations(simGroup);
 
-loadCoastlines(landGroup).catch(() => {
-    setHud('CARTOGRAPHY FAULT', 'Coastline dataset unavailable — globe wireframe only.');
+// ---------------------------------------------------------------------------
+// Idle spin: auto-rotate pauses while the user interacts, resumes after 10 s.
+// ---------------------------------------------------------------------------
+let resumeSpinTimer = null;
+controls.addEventListener('start', () => {
+    controls.autoRotate = false;
+    clearTimeout(resumeSpinTimer);
 });
+controls.addEventListener('end', () => {
+    clearTimeout(resumeSpinTimer);
+    resumeSpinTimer = setTimeout(() => {
+        if (rig.mode === 'free') controls.autoRotate = true;
+    }, 10000);
+});
+
+// ---------------------------------------------------------------------------
+// Camera rig: follows deep-space replays, frames the finale, returns home.
+// ---------------------------------------------------------------------------
+const rig = {
+    mode: 'free',        // free | sim | return
+    home: null,
+    framed: false,
+};
+
+function rigEnterSim() {
+    if (rig.mode === 'free') {
+        rig.home = { pos: camera.position.clone(), target: controls.target.clone() };
+    }
+    rig.mode = 'sim';
+    rig.framed = false;
+    controls.enabled = false;
+    controls.autoRotate = false;
+}
+
+function rigReturnHome() {
+    if (rig.mode === 'free' || !rig.home) return;
+    rig.mode = 'return';
+    rig.framed = false;
+    controls.enabled = false;
+}
+
+const _dir = new THREE.Vector3();
+function rigUpdate() {
+    if (rig.mode === 'sim') {
+        const d = sims.cameraDirective();
+        if (!d) return;
+        if (d.mode === 'follow') {
+            controls.target.lerp(d.target, 0.06);
+            _dir.subVectors(camera.position, controls.target);
+            if (_dir.lengthSq() < 1e-6) _dir.set(0, 0.4, 1);
+            _dir.normalize();
+            _dir.y += 0.0025 * d.dist;          // gentle cinematic elevation
+            _dir.normalize().multiplyScalar(d.dist);
+            camera.position.lerp(_dir.add(controls.target), 0.06);
+        } else if (d.mode === 'frame' && !rig.framed) {
+            const want = d.radius * 1.9;
+            controls.target.lerp(d.center, 0.05);
+            _dir.subVectors(camera.position, controls.target).normalize()
+                .multiplyScalar(want).add(controls.target);
+            camera.position.lerp(_dir, 0.05);
+            if (camera.position.distanceTo(_dir) < want * 0.03) {
+                rig.framed = true;              // hand the framed shot to the user
+                controls.enabled = true;
+            }
+        }
+    } else if (rig.mode === 'return') {
+        controls.target.lerp(rig.home.target, 0.07);
+        camera.position.lerp(rig.home.pos, 0.07);
+        if (camera.position.distanceTo(rig.home.pos) < 0.15) {
+            camera.position.copy(rig.home.pos);
+            controls.target.copy(rig.home.target);
+            rig.mode = 'free';
+            rig.home = null;
+            controls.enabled = true;
+        }
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Satellite catalog loading
@@ -62,13 +138,9 @@ async function refreshCatalog() {
     setHud('UPLINK', 'Polling CelesTrak GP registry…');
     refreshBtn.disabled = true;
 
-    const group = utilitySelect.value;
-    const country = countrySelect.value;
-    const label = group !== 'NONE'
-        ? `CELESTRAK GROUP:${group.toUpperCase()}`
-        : `CELESTRAK COUNTRY:${country}`;
-
-    const result = await satLayer.load(SatelliteLayer.queryUrl(country, group), label);
+    const group = catalogSelect.value;
+    const label = `CELESTRAK GROUP:${group.toUpperCase()}`;
+    const result = await satLayer.load(SatelliteLayer.queryUrl(group), label);
 
     if (result.fallback) {
         setLink('error', 'OFFLINE');
@@ -89,12 +161,19 @@ async function refreshCatalog() {
     refreshBtn.disabled = false;
 }
 
-countrySelect.addEventListener('change', () => {
-    utilitySelect.value = 'NONE';
-    refreshCatalog();
-});
-utilitySelect.addEventListener('change', refreshCatalog);
+catalogSelect.addEventListener('change', refreshCatalog);
 refreshBtn.addEventListener('click', refreshCatalog);
+
+scaleToggle.addEventListener('change', () => {
+    satLayer.exaggerated = scaleToggle.checked;
+    satLayer.update(new Date());
+    if (satLayer.selectedIndex >= 0) {
+        satLayer.select(satLayer.selectedIndex, new Date());
+    }
+    statusScale.innerHTML = scaleToggle.checked
+        ? 'SIZES &amp; DISTANCES NOT TO SCALE'
+        : 'TRUE-SCALE ALTITUDES · SIZES NOT TO SCALE';
+});
 
 // ---------------------------------------------------------------------------
 // Launch simulator UI
@@ -117,17 +196,14 @@ launchSelect.addEventListener('change', renderLaunchInfo);
 renderLaunchInfo();
 
 launchBtn.addEventListener('click', () => {
+    rigReturnHome();               // launches are earth-scale; leave any probe framing
+    satGroup.visible = true;
     const site = sims.runLaunch(launchSelect.value);
     if (site) {
         setHud('LIFTOFF DETECTED',
             `VEHICLE: ${site.rocket}<br>ORIGIN: ${site.name}<br>ASCENT: gravity-turn east`);
     }
 });
-
-sims.onLaunchComplete = (site) => {
-    setHud('MAIN ENGINE CUTOFF',
-        `VEHICLE: ${site.rocket}<br>STATUS: nominal insertion<br>SEQUENCE: complete`);
-};
 
 // ---------------------------------------------------------------------------
 // Deep-space probe UI
@@ -146,32 +222,44 @@ for (const [key, probe] of Object.entries(PROBES)) {
 probeCards.addEventListener('click', (e) => {
     const key = e.target.dataset?.probe;
     if (!key) return;
+    clearSelection();
+    satGroup.visible = false;      // declutter the heliocentric replay
+    rigEnterSim();
     const probe = sims.runProbe(key);
     if (probe) {
         setHud('TRAJECTORY PLOTTED',
-            `UNIT: ${probe.name}<br>FRAME: heliocentric escape<br>SPLINE: Catmull-Rom`);
+            `UNIT: ${probe.name}<br>FRAME: heliocentric (stylised)<br>REPLAY: rolling`);
     }
 });
 
-sims.onProbeProgress = (probe, au) => {
-    setHud('ESCAPE SEQUENCE', `UNIT: ${probe.name}<br>RADIAL DISTANCE: ${au} AU`);
-};
-sims.onProbeComplete = (probe) => {
-    setHud('HELIOCENTRIC TRANSIT ACHIEVED',
-        `UNIT: ${probe.name}<br>STATUS: beyond render bounds`);
+sims.onEvent = (title, body) => setHud(title, body);
+
+sims.onCleared = () => {
+    satGroup.visible = true;
+    rigReturnHome();
+    setHud('SYSTEM ONLINE', 'LEO radar environment scan active…');
 };
 
 // ---------------------------------------------------------------------------
-// Tabs + mobile panel
+// Tabs + mobile panel — leaving a simulation tab retires its scene.
 // ---------------------------------------------------------------------------
+let activeTab = 'track';
+
 document.querySelectorAll('.tab').forEach((tab) => {
     tab.addEventListener('click', () => {
+        const next = tab.dataset.tab;
+        if (next !== activeTab &&
+            (activeTab === 'launch' || activeTab === 'probes') &&
+            sims.hasContent()) {
+            sims.fadeOutAndClear();
+        }
+        activeTab = next;
         document.querySelectorAll('.tab').forEach((t) => {
             t.classList.toggle('active', t === tab);
             t.setAttribute('aria-selected', String(t === tab));
         });
         document.querySelectorAll('.tab-page').forEach((page) => {
-            page.classList.toggle('active', page.id === `tab-${tab.dataset.tab}`);
+            page.classList.toggle('active', page.id === `tab-${next}`);
         });
     });
 });
@@ -197,6 +285,7 @@ canvas.addEventListener('pointerup', (e) => {
     const moved = Math.hypot(e.clientX - pointerDown.x, e.clientY - pointerDown.y);
     pointerDown = null;
     if (moved > 5) return; // was a drag, not a click
+    if (!satGroup.visible) return;
 
     const index = satLayer.pick(e, camera, canvas);
     if (index >= 0) {
@@ -216,8 +305,12 @@ $('sat-card-close').addEventListener('click', clearSelection);
 window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
         clearSelection();
-        sims.clear();
-        setHud('SYSTEM ONLINE', 'LEO radar environment scan active…');
+        if (sims.hasContent()) {
+            sims.fadeOutAndClear();   // onCleared handles HUD + camera return
+        } else {
+            rigReturnHome();
+            setHud('SYSTEM ONLINE', 'LEO radar environment scan active…');
+        }
     }
 });
 
@@ -240,23 +333,28 @@ const PROPAGATE_INTERVAL_MS = 200;
 const READOUT_INTERVAL_MS = 250;
 let lastPropagate = 0;
 let lastReadout = 0;
+let lastFrame = 0;
 let frames = 0;
 let lastFpsSample = performance.now();
-const startTime = performance.now();
 
 function animate(timestamp) {
     requestAnimationFrame(animate);
+    const dt = Math.min((timestamp - lastFrame) / 1000, 0.1) || 0.016;
+    lastFrame = timestamp;
 
     if (timestamp - lastPropagate >= PROPAGATE_INTERVAL_MS) {
         lastPropagate = timestamp;
         satLayer.update(new Date());
     }
 
-    sims.update((timestamp - startTime) / 1000);
+    sims.update(dt);
+    updateClouds(dt);
+    rigUpdate();
 
     if (timestamp - lastReadout >= READOUT_INTERVAL_MS) {
         lastReadout = timestamp;
         const now = new Date();
+        updateSun(now);
         utcClock.textContent = `${now.toISOString().slice(0, 19).replace('T', ' ')} UTC`;
         if (satLayer.selectedIndex >= 0) updateSatCard();
     }
@@ -279,4 +377,4 @@ refreshCatalog();
 requestAnimationFrame(animate);
 
 // Console access for tinkering / debugging.
-window.__gse = { satLayer, sims, camera, controls, scene };
+window.__gse = { satLayer, sims, camera, controls, scene, rig };

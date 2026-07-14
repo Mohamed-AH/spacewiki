@@ -56,27 +56,33 @@
                 SGP4 model from CelesTrak two-line element sets.</p>
 
                 <div class="card">
-                    <h3>LEO Telemetry Filter</h3>
-                    <p>Query the global spatial registry by sovereign flag or technical profile.</p>
+                    <h3>Registry Catalog</h3>
+                    <p>Query a live element-set catalog from CelesTrak's GP registry.</p>
 
-                    <label for="country-select">Sovereign registry</label>
-                    <select id="country-select">
-                        <option value="US" selected>United States — NASA / USSF / Commercial</option>
-                        <option value="IND">India — ISRO</option>
-                        <option value="CIS">Russia — Roscosmos</option>
-                        <option value="PRC">China — CNSA</option>
-                    </select>
-
-                    <label for="utility-select">Technical profile</label>
-                    <select id="utility-select">
-                        <option value="NONE" selected>— Default: use country —</option>
-                        <option value="science">Scientific payloads</option>
-                        <option value="weather">Meteorological fleets</option>
-                        <option value="stations">Crewed space stations</option>
-                        <option value="gps-ops">Navigation — GPS</option>
-                        <option value="beidou">Navigation — BeiDou</option>
-                        <option value="glo-ops">Navigation — GLONASS</option>
-                        <option value="galileo">Navigation — Galileo</option>
+                    <label for="catalog-select">Catalog</label>
+                    <select id="catalog-select">
+                        <optgroup label="Featured">
+                            <option value="visual" selected>Brightest objects — naked-eye class</option>
+                            <option value="stations">Crewed space stations</option>
+                            <option value="last-30-days">Launched in the last 30 days</option>
+                            <option value="active">All active satellites (large)</option>
+                        </optgroup>
+                        <optgroup label="Sovereign navigation fleets">
+                            <option value="gps-ops">GPS — United States</option>
+                            <option value="glo-ops">GLONASS — Russia</option>
+                            <option value="beidou">BeiDou — China</option>
+                            <option value="galileo">Galileo — European Union</option>
+                        </optgroup>
+                        <optgroup label="Science &amp; observation">
+                            <option value="science">Scientific payloads</option>
+                            <option value="weather">Meteorological fleets</option>
+                            <option value="geo">Geosynchronous belt</option>
+                        </optgroup>
+                        <optgroup label="Mega-constellations">
+                            <option value="starlink">Starlink — SpaceX</option>
+                            <option value="oneweb">OneWeb</option>
+                            <option value="iridium-NEXT">Iridium NEXT</option>
+                        </optgroup>
                     </select>
 
                     <button id="refresh-btn" class="primary">Re-poll registry</button>
@@ -90,8 +96,13 @@
                         <li><span class="swatch" style="--c:#f0b429"></span>GEO — geosynchronous belt</li>
                         <li><span class="swatch" style="--c:#d2a8ff"></span>HEO — highly elliptical</li>
                     </ul>
-                    <p class="hint">Click any satellite in the viewport to inspect its live
-                    telemetry and instantaneous orbital track. Press <kbd>Esc</kbd> to deselect.</p>
+                    <label class="toggle">
+                        <input type="checkbox" id="scale-toggle" checked>
+                        Exaggerate low altitudes (display only)
+                    </label>
+                    <p class="hint">Marker sizes and low-orbit altitudes are exaggerated for
+                    visibility — telemetry readouts are always true values. Click any satellite
+                    to inspect it. Press <kbd>Esc</kbd> to deselect.</p>
                 </div>
             </section>
 
@@ -119,9 +130,9 @@
 
             <!-- ============ PROBES ============ -->
             <section class="tab-page" id="tab-probes" role="tabpanel">
-                <p class="lede">Interplanetary flight logs. Heliocentric escape routes are
-                modelled as Catmull-Rom splines encoding launch, gravity assists, and
-                system-exit vectors.</p>
+                <p class="lede">Interplanetary flight logs, replayed through a stylised solar
+                system — gravity assists, orbit insertions, and system-exit trajectories.
+                Planetary distances are compressed for legibility (not to scale).</p>
                 <div id="probe-cards"></div>
             </section>
 
@@ -140,20 +151,30 @@
                 </div>
 
                 <div class="card">
-                    <h3>Textureless Cartography</h3>
-                    <p>No imagery is downloaded. Coastlines are generated on the fly from the
-                    Natural Earth 1:110m land dataset: each geographic polygon is projected
-                    onto the sphere and drawn as a GPU line loop, keeping the whole planet
-                    under 150 kB.</p>
+                    <h3>Live Day/Night Terminator</h3>
+                    <p>The globe blends NASA Blue Marble imagery with night-side city lights
+                    in a custom shader. The terminator is computed from a real solar
+                    ephemeris every quarter second — the sunlit hemisphere you see is the
+                    one lit right now.</p>
                 </div>
 
                 <div class="card">
                     <h3>Data Sources</h3>
                     <p><strong>CelesTrak</strong> — live GP element sets
                     (<code>celestrak.org</code>).<br>
-                    <strong>Natural Earth</strong> — public-domain vector cartography.<br>
+                    <strong>NASA / Three.js</strong> — Earth surface, city-light, and cloud
+                    imagery.<br>
                     <strong>Three.js</strong> r160 &amp; <strong>satellite.js</strong> v5 —
                     rendering and propagation, vendored locally.</p>
+                </div>
+
+                <div class="card">
+                    <h3>Scale &amp; Accuracy</h3>
+                    <p>Satellite positions and telemetry are computed from real element sets
+                    in real time. For visibility, marker sizes and low-orbit altitudes are
+                    exaggerated on screen, and the deep-space replay compresses planetary
+                    distances — as most professional aerospace visualisations do. Nothing in
+                    the numeric readouts is scaled.</p>
                 </div>
 
                 <div class="card">
@@ -161,6 +182,14 @@
                     <p>Drag to orbit · scroll to zoom · right-drag to pan ·
                     click a satellite to inspect · <kbd>Esc</kbd> clears simulations
                     and selection.</p>
+                </div>
+
+                <div class="card">
+                    <h3>Suggest Content</h3>
+                    <p>Spotted a mission we should chronicle, a catalog worth tracking, or a
+                    correction we should make? Suggestions from fellow space enthusiasts are
+                    very welcome.</p>
+                    <p><a class="mail" href="mailto:mojed+spacewiki@intigriti.me">mojed+spacewiki@intigriti.me</a></p>
                 </div>
             </section>
         </div>
@@ -192,6 +221,7 @@
             <span id="status-nodes">CATALOG: —</span>
             <span id="status-render">RENDERED: —</span>
             <span id="status-fps">FPS: —</span>
+            <span id="status-scale" class="status-note">SIZES &amp; DISTANCES NOT TO SCALE</span>
         </div>
     </main>
 </div>
