@@ -4,7 +4,10 @@
 
 import * as THREE from 'three';
 import { latLonToVector3, eastAt, makeDiscTexture } from './scene.js';
-import { EARTH_RADIUS, LAUNCH_SITES, PROBES, PLANETS } from './data.js';
+import {
+    EARTH_RADIUS, LAUNCH_SITES, PROBES, PLANETS,
+    SUN_DISTANCE, AU_COMPRESSION,
+} from './data.js';
 import { buildSolarSystem, planetPosition, SUN_POS } from './solar.js';
 
 const TRAIL_LENGTH = 90;
@@ -25,7 +28,8 @@ export class Simulations {
 
         this.activeLaunch = null;
         this.payload = null;         // post-launch orbiting payload
-        this.activeProbe = null;
+        this.probe = null;           // deep-space replay state (persists when done)
+        this.probePlaying = false;
         this.frame = null;           // end-of-probe camera framing
         this.pulses = [];            // planet glow flashes
         this.fading = [];            // objects being faded out
@@ -54,7 +58,8 @@ export class Simulations {
         }
         this.activeLaunch = null;
         this.payload = null;
-        this.activeProbe = null;
+        this.probe = null;
+        this.probePlaying = false;
         this.frame = null;
         this.pulses = [];
         this.clearing = false;
@@ -65,7 +70,8 @@ export class Simulations {
         if (!this.hasContent() && this.fading.length === 0) return;
         this.activeLaunch = null;
         this.payload = null;
-        this.activeProbe = null;
+        this.probe = null;
+        this.probePlaying = false;
         this.frame = null;
         this.pulses = [];
         // Snapshot first — startFade re-adds each object so it keeps rendering
@@ -247,7 +253,7 @@ export class Simulations {
         } else {
             const last = anchors.at(-1);
             const outward = new THREE.Vector3().subVectors(last, SUN_POS).normalize();
-            endPos = last.clone().addScaledVector(outward, 55);
+            endPos = last.clone().addScaledVector(outward, route.end.escapeLength ?? 55);
         }
         anchors.push(endPos);
 
@@ -285,18 +291,24 @@ export class Simulations {
             return { t: best / samples, note: wp.note, body: wp.body };
         });
 
-        this.activeProbe = {
+        this.probe = {
             probe, route, curve, body, path, bodies, events,
+            allEvents: events.map((e) => ({ ...e })),   // immutable copy for the tracker
             samples,
             progress: 0,
+            done: false,
         };
+        this.probePlaying = true;
         return probe;
     }
 
     finishProbe() {
-        const P = this.activeProbe;
-        this.activeProbe = null;
+        const P = this.probe;
+        this.probePlaying = false;
+        P.done = true;
+        P.progress = 1;
         P.path.geometry.setDrawRange(0, P.samples + 1);
+        P.body.position.copy(P.curve.getPointAt(1));
 
         if (P.route.end.type === 'orbit') {
             const target = P.bodies[P.route.end.body];
@@ -321,12 +333,61 @@ export class Simulations {
     }
 
     // -----------------------------------------------------------------------
+    // Tracker / scrubbing API (consumed by the timeline overlay)
+    // -----------------------------------------------------------------------
+
+    static ease(p) {
+        return p * p * (3 - 2 * p);   // slow launch, fast cruise, gentle arrival
+    }
+
+    /** Move the replay to an arbitrary point on its timeline (0..1). */
+    scrubProbe(frac) {
+        const P = this.probe;
+        if (!P) return;
+        P.progress = Math.min(Math.max(frac, 0), 1);
+        if (P.progress < 1) P.done = false;
+        const eased = Simulations.ease(P.progress);
+        P.body.position.copy(P.curve.getPointAt(eased));
+        P.path.geometry.setDrawRange(0, Math.floor(eased * P.samples) + 1);
+    }
+
+    setProbePlaying(playing) {
+        const P = this.probe;
+        if (!P) return;
+        if (playing && P.progress >= 1) this.scrubProbe(0);   // replay from launch
+        this.probePlaying = playing && this.probe.progress < 1;
+    }
+
+    /** Live numbers for the timeline & distance tracker overlay. */
+    probeStatus() {
+        const P = this.probe;
+        if (!P) return null;
+        const eased = Simulations.ease(P.progress);
+        const distSun = P.body.position.distanceTo(SUN_POS);
+        const au = Math.pow(distSun / SUN_DISTANCE, 1 / AU_COMPRESSION);
+        const { launchYear, endYear } = P.route;
+        return {
+            name: P.probe.name,
+            color: P.probe.color,
+            progress: P.progress,
+            playing: this.probePlaying,
+            done: P.done,
+            year: launchYear + eased * ((endYear ?? launchYear) - launchYear),
+            launchYear,
+            endYear,
+            au,
+            lightMinutes: au * 8.317,
+            ticks: P.allEvents.map((e) => ({ t: e.t, note: e.note })),
+        };
+    }
+
+    // -----------------------------------------------------------------------
     // Camera choreography (consumed by the app's camera rig)
     // -----------------------------------------------------------------------
 
     cameraDirective() {
-        if (this.activeProbe) {
-            const pos = this.activeProbe.body.position;
+        if (this.probe && this.probePlaying) {
+            const pos = this.probe.body.position;
             const dist = Math.min(14 + pos.length() * 0.42, 170);
             return { mode: 'follow', target: pos, dist };
         }
@@ -388,7 +449,7 @@ export class Simulations {
         this.time += dt;
         if (this.activeLaunch) this.updateLaunch(dt);
         if (this.payload) this.updatePayload(dt);
-        if (this.activeProbe) this.updateProbe(dt);
+        if (this.probe && this.probePlaying) this.updateProbe(dt);
         this.updatePulses(dt);
         this.updateFades(dt);
     }
@@ -431,10 +492,9 @@ export class Simulations {
     }
 
     updateProbe(dt) {
-        const P = this.activeProbe;
+        const P = this.probe;
         P.progress += dt / PROBE_DURATION_S;
-        const p = Math.min(P.progress, 1);
-        const eased = p * p * (3 - 2 * p);   // slow launch, fast cruise, gentle arrival
+        const eased = Simulations.ease(Math.min(P.progress, 1));
 
         while (P.events.length && eased >= P.events[0].t) {
             const e = P.events.shift();
