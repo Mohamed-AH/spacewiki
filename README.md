@@ -120,6 +120,11 @@ All numeric readouts are unscaled.
   [three.js](https://threejs.org) example assets (MIT)
 - [Three.js](https://threejs.org) (MIT) and [satellite.js](https://github.com/shashwatak/satellite-js) (MIT), vendored under `vendor/`
 
+## License
+
+[MIT](LICENSE) — free to use, copy, modify, and share. The vendored libraries
+(Three.js, satellite.js) are also MIT-licensed.
+
 ## Suggest content
 
 Spotted a mission we should chronicle or a catalog worth tracking? Email
