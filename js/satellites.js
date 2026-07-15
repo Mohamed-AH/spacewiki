@@ -69,7 +69,7 @@ export class SatelliteLayer {
         this.selectedIndex = -1;
         this.exaggerated = true;   // display-only altitude scaling (see toggle)
         this.classVisible = { LEO: true, MEO: true, GEO: true, HEO: true };
-        this.labelsEnabled = false;
+        this.labelsEnabled = true;   // on by default; Display-card toggle turns them off
         this.labelItems = [];      // { index, sprite }
         this.cursor = 0;           // round-robin propagation cursor
 

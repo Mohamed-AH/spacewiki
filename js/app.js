@@ -242,10 +242,6 @@ async function refreshCatalog() {
 
     // Small catalogs label everything; large ones label the first 60.
     labelsNote.textContent = satLayer.labelsCoverAll() ? '(all objects)' : '(first 60)';
-    if (satLayer.labelsCoverAll() && !labelsToggle.checked) {
-        labelsToggle.checked = true;
-        satLayer.setLabelsEnabled(true);
-    }
 }
 
 catalogSelect.addEventListener('change', refreshCatalog);
